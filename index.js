@@ -18,6 +18,27 @@ if (!PUBLIC_URL) throw new Error("Missing PUBLIC_URL");
 const bot = new Telegraf(BOT_TOKEN);
 const app = express();
 
+const DISCORD_CONTACT_USER_ID = "1374514852701143091";
+const TELEGRAM_CONTACT_URL = "https://t.me/splitthepicks";
+
+function discordMention(userId) {
+  return `<@${userId}>`;
+}
+
+function transformContent(raw) {
+  let text = (raw || "").trim();
+
+  // Normalize common Telegram link formats
+  text = text.replace(/https?:\/\/t\.me\/splitthepicks/gi, "t.me/splitthepicks");
+
+  // Replace @splitthepicks OR t.me/splitthepicks with both contact options
+  const contactLine = `${discordMention(DISCORD_CONTACT_USER_ID)} • ${TELEGRAM_CONTACT_URL}`;
+  text = text.replace(/@splitthepicks/gi, contactLine);
+  text = text.replace(/\bt\.me\/splitthepicks\b/gi, contactLine);
+
+  return text;
+}
+
 // Telegram will POST JSON updates here
 app.use(express.json());
 
@@ -27,6 +48,8 @@ const albumBuffer = new Map(); // key -> { chatId, caption, items: [], timer }
 function normalizeCaption(msg) {
   return msg?.caption || msg?.text || "";
 }
+
+
 
 // Build a Telegram file URL (Telegram hosts files at this URL)
 async function getTelegramFileUrl(fileId) {
@@ -81,7 +104,8 @@ bot.on("channel_post", async (ctx) => {
   const doc = msg.document;
 
   const mediaGroupId = msg.media_group_id;
-  const caption = normalizeCaption(msg);
+  const caption = transformContent(normalizeCaption(msg));
+
 
   // Decide fileId + name if this message contains media
   let fileId = null;
