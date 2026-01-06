@@ -46,42 +46,32 @@ app.use(express.json());
 // ---- Album buffering (media_group_id) ----
 const albumBuffer = new Map(); // key -> { caption, items: [], timer }
 
-function normalizeCaption(msg) {
-  return msg?.caption || msg?.text || "";
-}
+function transformContent(raw) {
+  if (!raw) return raw;
 
-// Build a Telegram file URL (Telegram hosts files at this URL)
-async function getTelegramFileUrl(fileId) {
-  const r = await fetch(
-    `https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${fileId}`
-  );
-  const j = await r.json();
-  const filePath = j?.result?.file_path;
-  if (!filePath) throw new Error("Could not resolve Telegram file path");
-  return `https://api.telegram.org/file/bot${BOT_TOKEN}/${filePath}`;
-}
+  let text = raw;
 
-async function sendToDiscord({ content, files }) {
-  const form = new FormData();
-  form.append(
-    "payload_json",
-    JSON.stringify({ content: (content || "").slice(0, 1900) })
+  // Remove malformed https://@username junk ONLY
+  text = text.replace(/https?:\/\/@\S+/gi, "");
+
+  // Replace ANY @splitthepicks or @VEGASKILLER-style handle
+  // with the Discord user mention ONLY
+  text = text.replace(
+    /@splitthepicks\b|@vegaskiller\b/gi,
+    `<@${DISCORD_CONTACT_USER_ID}>`
   );
 
-  for (let i = 0; i < files.length; i++) {
-    const { url, filename } = files[i];
-    const resp = await fetch(url);
-    if (!resp.ok) throw new Error(`Failed to fetch media: ${resp.status}`);
-    const buf = Buffer.from(await resp.arrayBuffer());
-    form.append(`files[${i}]`, buf, { filename: filename || `media-${i}.jpg` });
+  // Append Telegram contact block once (if not already present)
+  if (!/t\.me\/splitthepicks/i.test(text)) {
+    text += `
+
+You can contact @splitthepicks right away on Telegram:
+${TELEGRAM_CONTACT_URL}`;
   }
 
-  const res = await fetch(DISCORD_WEBHOOK_URL, { method: "POST", body: form });
-  if (!res.ok) {
-    const txt = await res.text();
-    throw new Error(`Discord webhook failed: ${res.status} ${txt}`);
-  }
+  return text;
 }
+
 
 // Optional: only forward posts from a specific channel
 function passesChannelFilter(ctx) {
