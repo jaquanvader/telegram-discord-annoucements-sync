@@ -29,54 +29,70 @@ function transformContent(raw) {
 
   const footer = `DM 👉 <@${DISCORD_CONTACT_USER_ID}> • ${TELEGRAM_CONTACT_URL}`;
 
-  // 1) Remove malformed links like https://@VEGASKILLER but KEEP line breaks
+  // Remove malformed links like https://@VEGASKILLER but KEEP line breaks
   text = text.replace(/https?:\/\/@\S+/gi, "");
 
-  // 2) Detect any SplitThePicks reference anywhere
-  const hasSTP = /@splitthepicks\b|t\.me\/splitthepicks\b|https?:\/\/t\.me\/splitthepicks\b|\bsplitthepicks\b/i.test(text);
+  // Detect any SplitThePicks reference
+  const hasSTP =
+    /@splitthepicks\b|t\.me\/splitthepicks\b|https?:\/\/t\.me\/splitthepicks\b|\bsplitthepicks\b/i.test(text);
 
-  if (!hasSTP) {
-    return text;
-  }
+  if (!hasSTP) return text;
 
-  // 3) If there is already a "DM 👉 ..." line, replace ONLY that line with our clean footer
-  //    (preserves all other formatting + spacing)
   const lines = text.split(/\r?\n/);
 
   let replaced = false;
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
 
-    // Any DM line OR any line that contains splitthepicks / t.me/splitthepicks
-    if (/^\s*DM\s*👉/i.test(line) || /splitthepicks|t\.me\/splitthepicks/i.test(line)) {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i] || "";
+    const next = lines[i + 1] || "";
+
+    const isDMLine = /^\s*DM\s*👉/i.test(line);
+    const mentionsSTP = /@splitthepicks\b|splitthepicks|t\.me\/splitthepicks/i.test(line);
+
+    if (isDMLine || mentionsSTP) {
+      // Replace this line with the clean footer
       lines[i] = footer;
       replaced = true;
+
+      // If the next line looks like it was part of the CTA (continuation),
+      // remove it so we don't get: "footer" then "on board today 🔐"
+      const nextLooksLikeContinuation =
+        next.trim().length > 0 &&
+        !/Ways To Pay:/i.test(next) &&
+        !/^\s*💳|^\s*💰|^\s*🌪️|^\s*📈|^\s*🚀/u.test(next) &&
+        !/^\s*DM\s*👉/i.test(next);
+
+      // Extra guard: only remove if the original DM line didn't already contain "on board"
+      // (common case: the "to get" line then "on board..." on next line)
+      if (nextLooksLikeContinuation && /to get/i.test(line)) {
+        lines[i + 1] = ""; // blank it out (keeps spacing consistent)
+      }
     }
   }
 
   let out = lines.join("\n");
 
-  // 4) If we didn't replace an existing DM line, append footer as a new line block
+  // If we didn't replace an existing DM block, append footer nicely
   if (!replaced) {
-    // Keep original spacing; just ensure there’s a blank line before footer if needed
     if (!out.endsWith("\n")) out += "\n";
     out += "\n" + footer;
   }
 
-  // 5) Remove duplicate footers if multiple lines matched
-  // (keep first instance)
+  // Remove duplicate footer lines (keep first)
   const outLines = out.split("\n");
-  let seenFooter = false;
+  let seen = false;
   const deduped = outLines.filter((l) => {
     const isFooter = l.trim() === footer.trim();
     if (!isFooter) return true;
-    if (seenFooter) return false;
-    seenFooter = true;
+    if (seen) return false;
+    seen = true;
     return true;
   });
 
-  return deduped.join("\n");
+  // Clean up any lines we blanked out (but keep intentional blank lines)
+  return deduped.join("\n").replace(/\n{3,}/g, "\n\n");
 }
+
 
 
 // Telegram will POST JSON updates here
