@@ -18,66 +18,74 @@ if (!PUBLIC_URL) throw new Error("Missing PUBLIC_URL");
 const bot = new Telegraf(BOT_TOKEN);
 const app = express();
 
-const DISCORD_CONTACT_USER_ID = "1374514852701143091";
-const TELEGRAM_CONTACT_URL = "https://t.me/splitthepicks";
+// ---- SplitThePicks contact formatting ----
+const DISCORD_CONTACT_USER_ID =
+  process.env.DISCORD_CONTACT_USER_ID || "1374514852701143091";
+const TELEGRAM_CONTACT_URL =
+  process.env.TELEGRAM_CONTACT_URL || "https://t.me/splitthepicks";
 
-function discordMention(userId) {
-  return `<@${userId}>`;
+function contactLine() {
+  return `DM 👉 <@${DISCORD_CONTACT_USER_ID}> • ${TELEGRAM_CONTACT_URL}`;
 }
-
-const DISCORD_CONTACT_USER_ID = "1374514852701143091";
-const TELEGRAM_CONTACT_URL = "https://t.me/splitthepicks";
 
 function transformContent(raw) {
   let text = (raw || "").trim();
+  if (!text) return text;
 
-  const contactLine = `DM 👉 <@${DISCORD_CONTACT_USER_ID}> • ${TELEGRAM_CONTACT_URL}`;
+  // Remove malformed links like https://@VEGASKILLER
+  text = text.replace(/https?:\/\/@\S+/gi, "").trim();
 
-  // Normalize everything to lowercase for detection
-  const lower = text.toLowerCase();
+  // Normalize common STP references to one clean line
+  const stpRegex =
+    /(@splitthepicks\b|https?:\/\/t\.me\/splitthepicks\b|t\.me\/splitthepicks\b|\bsplitthepicks\b)/gi;
 
-  // Detect ANY SplitThePicks reference
-  const hasSTP =
-    lower.includes("@splitthepicks") ||
-    lower.includes("t.me/splitthepicks") ||
-    lower.includes("splitthepicks");
+  const hasSTP = stpRegex.test(text);
 
-  // Remove ALL @handles and malformed links (Telegram junk)
+  // Replace any STP mention with nothing (we’ll append the clean line once)
+  text = text.replace(stpRegex, "").trim();
+
+  // Collapse spacing + clean up stray punctuation from removals
   text = text
-    // remove @username
-    .replace(/@\S+/g, "")
-    // remove malformed https://@username
-    .replace(/https?:\/\/@\S+/gi, "")
-    // remove raw t.me links
-    .replace(/https?:\/\/t\.me\/\S+/gi, "")
-    // collapse extra spaces
     .replace(/\s{2,}/g, " ")
+    .replace(/\s+([•|,\-])/g, "$1") // remove space before separators
+    .replace(/([•|,\-])\s+/g, "$1 ") // normalize space after separators
+    .replace(/^\s*[•|,\-]\s*/g, "")  // strip leading separators
     .trim();
 
-  // Append ONE clean contact line if SplitThePicks was mentioned
   if (hasSTP) {
-    text = text ? `${text}\n\n${contactLine}` : contactLine;
+    const line = contactLine();
+
+    // If caption already contains the Discord ID or t.me link, don’t double add
+    const alreadyHasContact =
+      text.includes(DISCORD_CONTACT_USER_ID) ||
+      /t\.me\/splitthepicks/i.test(text);
+
+    if (!alreadyHasContact) {
+      text = text ? `${text}\n\n${line}` : line;
+    } else {
+      // If it already has something, just ensure it's clean (no https://@)
+      text = text.replace(/https?:\/\/@\S+/gi, "").trim();
+    }
   }
 
   return text;
 }
 
-
 // Telegram will POST JSON updates here
 app.use(express.json());
 
 // ---- Album buffering (media_group_id) ----
-const albumBuffer = new Map(); // key -> { chatId, caption, items: [], timer }
+const albumBuffer = new Map(); // key -> { caption, items: [], timer }
 
 function normalizeCaption(msg) {
   return msg?.caption || msg?.text || "";
 }
 
-
-
 // Build a Telegram file URL (Telegram hosts files at this URL)
 async function getTelegramFileUrl(fileId) {
-  const r = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${fileId}`);
+  const r = await fetch(
+    `https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${fileId}`
+  );
   const j = await r.json();
   const filePath = j?.result?.file_path;
   if (!filePath) throw new Error("Could not resolve Telegram file path");
@@ -85,17 +93,17 @@ async function getTelegramFileUrl(fileId) {
 }
 
 async function sendToDiscord({ content, files }) {
-  // Discord webhooks accept multipart form w/ payload_json + file(s)
   const form = new FormData();
-  form.append("payload_json", JSON.stringify({ content: content?.slice(0, 1900) || "" }));
+  form.append(
+    "payload_json",
+    JSON.stringify({ content: (content || "").slice(0, 1900) })
+  );
 
   for (let i = 0; i < files.length; i++) {
     const { url, filename } = files[i];
     const resp = await fetch(url);
     if (!resp.ok) throw new Error(`Failed to fetch media: ${resp.status}`);
     const buf = Buffer.from(await resp.arrayBuffer());
-
-    // "files[0]" style works well for webhooks
     form.append(`files[${i}]`, buf, { filename: filename || `media-${i}.jpg` });
   }
 
@@ -112,9 +120,11 @@ function passesChannelFilter(ctx) {
   const chat = ctx.update?.channel_post?.chat;
   if (!chat) return false;
 
-  // chat.username is without "@"
   const asAt = chat.username ? `@${chat.username}` : null;
-  return asAt === TELEGRAM_CHANNEL_ID || chat.id?.toString() === TELEGRAM_CHANNEL_ID;
+  return (
+    asAt === TELEGRAM_CHANNEL_ID ||
+    chat.id?.toString() === TELEGRAM_CHANNEL_ID
+  );
 }
 
 bot.on("channel_post", async (ctx) => {
@@ -122,7 +132,6 @@ bot.on("channel_post", async (ctx) => {
 
   const msg = ctx.update.channel_post;
 
-  // Telegram photo sizes come as array; last is usually highest res
   const photo = msg.photo?.[msg.photo.length - 1];
   const video = msg.video;
   const doc = msg.document;
@@ -130,8 +139,6 @@ bot.on("channel_post", async (ctx) => {
   const mediaGroupId = msg.media_group_id;
   const caption = transformContent(normalizeCaption(msg));
 
-
-  // Decide fileId + name if this message contains media
   let fileId = null;
   let filename = null;
 
@@ -145,12 +152,10 @@ bot.on("channel_post", async (ctx) => {
     fileId = doc.file_id;
     filename = doc.file_name || `file-${msg.message_id}`;
   } else {
-    // Pure text post
     await sendToDiscord({ content: caption || "(no text)", files: [] });
     return;
   }
 
-  // Resolve the hosted file URL
   const fileUrl = await getTelegramFileUrl(fileId);
 
   // ---- Album handling ----
@@ -158,18 +163,15 @@ bot.on("channel_post", async (ctx) => {
     const key = `${msg.chat.id}:${mediaGroupId}`;
     const existing = albumBuffer.get(key) || { caption: "", items: [], timer: null };
 
-    // keep first non-empty caption
     if (!existing.caption && caption) existing.caption = caption;
 
     existing.items.push({ url: fileUrl, filename });
 
-    // reset timer: wait a moment for the rest of the album parts
     if (existing.timer) clearTimeout(existing.timer);
 
     existing.timer = setTimeout(async () => {
       albumBuffer.delete(key);
 
-      // NOTE: Discord has file count/size limits—keep it reasonable
       const files = existing.items.slice(0, 10);
 
       try {
@@ -186,26 +188,22 @@ bot.on("channel_post", async (ctx) => {
     return;
   }
 
-  // Single media post
   await sendToDiscord({
     content: caption || "",
     files: [{ url: fileUrl, filename }]
   });
 });
 
-// Express route to receive Telegram webhook calls
 app.post("/telegram-webhook", (req, res) => {
   bot.handleUpdate(req.body);
   res.sendStatus(200);
 });
 
-// Health check
 app.get("/", (req, res) => res.status(200).send("ok"));
 
 app.listen(PORT, async () => {
   console.log(`Listening on :${PORT}`);
 
-  // Set Telegram webhook on startup
   const webhookUrl = `${PUBLIC_URL}/telegram-webhook`;
   await bot.telegram.setWebhook(webhookUrl);
   console.log("Webhook set to:", webhookUrl);
