@@ -27,41 +27,18 @@ const TELEGRAM_CONTACT_URL =
 function transformContent(raw) {
   if (!raw) return raw;
 
-  return raw
-    // Remove ONLY malformed https://@username junk
-    .replace(/https?:\/\/@\S+/gi, "")
-    // Replace @splitthepicks with Discord mention + Telegram link
-    .replace(
-      /@splitthepicks\b/gi,
-      `<@${DISCORD_CONTACT_USER_ID}> • ${TELEGRAM_CONTACT_URL}`
-    );
-}
-
-
-
-
-// Telegram will POST JSON updates here
-app.use(express.json());
-
-// ---- Album buffering (media_group_id) ----
-const albumBuffer = new Map(); // key -> { caption, items: [], timer }
-
-function transformContent(raw) {
-  if (!raw) return raw;
-
   let text = raw;
 
   // Remove malformed https://@username junk ONLY
   text = text.replace(/https?:\/\/@\S+/gi, "");
 
-  // Replace ANY @splitthepicks or @VEGASKILLER-style handle
-  // with the Discord user mention ONLY
-  text = text.replace(
-    /@splitthepicks\b|@vegaskiller\b/gi,
-    `<@${DISCORD_CONTACT_USER_ID}>`
-  );
+  // Replace @splitthepicks with Discord mention ONLY
+  text = text.replace(/@splitthepicks\b/gi, `<@${DISCORD_CONTACT_USER_ID}>`);
 
-  // Append Telegram contact block once (if not already present)
+  // If you ALSO want to replace @VEGASKILLER in that DM line, keep this line:
+  text = text.replace(/@vegaskiller\b/gi, `<@${DISCORD_CONTACT_USER_ID}>`);
+
+  // Append Telegram footer once
   if (!/t\.me\/splitthepicks/i.test(text)) {
     text += `
 
@@ -71,6 +48,8 @@ ${TELEGRAM_CONTACT_URL}`;
 
   return text;
 }
+
+
 
 
 // Optional: only forward posts from a specific channel
