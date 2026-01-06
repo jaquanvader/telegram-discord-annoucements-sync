@@ -24,52 +24,60 @@ const DISCORD_CONTACT_USER_ID =
 const TELEGRAM_CONTACT_URL =
   process.env.TELEGRAM_CONTACT_URL || "https://t.me/splitthepicks";
 
-function contactLine() {
-  return `DM 👉 <@${DISCORD_CONTACT_USER_ID}> • ${TELEGRAM_CONTACT_URL}`;
-}
-
 function transformContent(raw) {
-  let text = (raw || "").trim();
-  if (!text) return text;
+  let text = (raw ?? "");
 
-  // Remove malformed links like https://@VEGASKILLER
-  text = text.replace(/https?:\/\/@\S+/gi, "").trim();
+  const footer = `DM 👉 <@${DISCORD_CONTACT_USER_ID}> • ${TELEGRAM_CONTACT_URL}`;
 
-  // Normalize common STP references to one clean line
-  const stpRegex =
-    /(@splitthepicks\b|https?:\/\/t\.me\/splitthepicks\b|t\.me\/splitthepicks\b|\bsplitthepicks\b)/gi;
+  // 1) Remove malformed links like https://@VEGASKILLER but KEEP line breaks
+  text = text.replace(/https?:\/\/@\S+/gi, "");
 
-  const hasSTP = stpRegex.test(text);
+  // 2) Detect any SplitThePicks reference anywhere
+  const hasSTP = /@splitthepicks\b|t\.me\/splitthepicks\b|https?:\/\/t\.me\/splitthepicks\b|\bsplitthepicks\b/i.test(text);
 
-  // Replace any STP mention with nothing (we’ll append the clean line once)
-  text = text.replace(stpRegex, "").trim();
+  if (!hasSTP) {
+    return text;
+  }
 
-  // Collapse spacing + clean up stray punctuation from removals
-  text = text
-    .replace(/\s{2,}/g, " ")
-    .replace(/\s+([•|,\-])/g, "$1") // remove space before separators
-    .replace(/([•|,\-])\s+/g, "$1 ") // normalize space after separators
-    .replace(/^\s*[•|,\-]\s*/g, "")  // strip leading separators
-    .trim();
+  // 3) If there is already a "DM 👉 ..." line, replace ONLY that line with our clean footer
+  //    (preserves all other formatting + spacing)
+  const lines = text.split(/\r?\n/);
 
-  if (hasSTP) {
-    const line = contactLine();
+  let replaced = false;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
 
-    // If caption already contains the Discord ID or t.me link, don’t double add
-    const alreadyHasContact =
-      text.includes(DISCORD_CONTACT_USER_ID) ||
-      /t\.me\/splitthepicks/i.test(text);
-
-    if (!alreadyHasContact) {
-      text = text ? `${text}\n\n${line}` : line;
-    } else {
-      // If it already has something, just ensure it's clean (no https://@)
-      text = text.replace(/https?:\/\/@\S+/gi, "").trim();
+    // Any DM line OR any line that contains splitthepicks / t.me/splitthepicks
+    if (/^\s*DM\s*👉/i.test(line) || /splitthepicks|t\.me\/splitthepicks/i.test(line)) {
+      lines[i] = footer;
+      replaced = true;
     }
   }
 
-  return text;
+  let out = lines.join("\n");
+
+  // 4) If we didn't replace an existing DM line, append footer as a new line block
+  if (!replaced) {
+    // Keep original spacing; just ensure there’s a blank line before footer if needed
+    if (!out.endsWith("\n")) out += "\n";
+    out += "\n" + footer;
+  }
+
+  // 5) Remove duplicate footers if multiple lines matched
+  // (keep first instance)
+  const outLines = out.split("\n");
+  let seenFooter = false;
+  const deduped = outLines.filter((l) => {
+    const isFooter = l.trim() === footer.trim();
+    if (!isFooter) return true;
+    if (seenFooter) return false;
+    seenFooter = true;
+    return true;
+  });
+
+  return deduped.join("\n");
 }
+
 
 // Telegram will POST JSON updates here
 app.use(express.json());
