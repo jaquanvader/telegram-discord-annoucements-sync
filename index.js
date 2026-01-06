@@ -132,17 +132,25 @@ bot.on("channel_post", async (ctx) => {
   });
 });
 
-app.post("/telegram-webhook", (req, res) => {
-  bot.handleUpdate(req.body);
-  res.sendStatus(200);
+// Telegram webhook: parse JSON ONLY for this route
+app.post("/telegram-webhook", express.json(), (req, res) => {
+  try {
+    // Telegram should send an update object with update_id
+    if (!req.body || typeof req.body !== "object") {
+      console.error("Webhook received non-JSON body:", typeof req.body);
+      return res.sendStatus(400);
+    }
+
+    if (req.body.update_id === undefined) {
+      console.error("Webhook received unexpected payload:", JSON.stringify(req.body).slice(0, 500));
+      return res.sendStatus(400);
+    }
+
+    bot.handleUpdate(req.body);
+    return res.sendStatus(200);
+  } catch (e) {
+    console.error("Webhook error:", e);
+    return res.sendStatus(500);
+  }
 });
 
-app.get("/", (req, res) => res.status(200).send("ok"));
-
-app.listen(PORT, async () => {
-  console.log(`Listening on :${PORT}`);
-
-  const webhookUrl = `${PUBLIC_URL}/telegram-webhook`;
-  await bot.telegram.setWebhook(webhookUrl);
-  console.log("Webhook set to:", webhookUrl);
-});
