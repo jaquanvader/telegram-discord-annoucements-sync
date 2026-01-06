@@ -45,7 +45,6 @@ function transformContent(raw) {
   if (!/t\.me\/splitthepicks/i.test(text)) {
     text += `
 
-You can contact @splitthepicks right away on Telegram:
 ${TELEGRAM_CONTACT_URL}`;
   }
 
