@@ -25,73 +25,18 @@ const TELEGRAM_CONTACT_URL =
   process.env.TELEGRAM_CONTACT_URL || "https://t.me/splitthepicks";
 
 function transformContent(raw) {
-  let text = (raw ?? "");
+  if (!raw) return raw;
 
-  const footer = `DM 👉 <@${DISCORD_CONTACT_USER_ID}> • ${TELEGRAM_CONTACT_URL}`;
-
-  // Remove malformed links like https://@VEGASKILLER but KEEP line breaks
-  text = text.replace(/https?:\/\/@\S+/gi, "");
-
-  // Detect any SplitThePicks reference
-  const hasSTP =
-    /@splitthepicks\b|t\.me\/splitthepicks\b|https?:\/\/t\.me\/splitthepicks\b|\bsplitthepicks\b/i.test(text);
-
-  if (!hasSTP) return text;
-
-  const lines = text.split(/\r?\n/);
-
-  let replaced = false;
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i] || "";
-    const next = lines[i + 1] || "";
-
-    const isDMLine = /^\s*DM\s*👉/i.test(line);
-    const mentionsSTP = /@splitthepicks\b|splitthepicks|t\.me\/splitthepicks/i.test(line);
-
-    if (isDMLine || mentionsSTP) {
-      // Replace this line with the clean footer
-      lines[i] = footer;
-      replaced = true;
-
-      // If the next line looks like it was part of the CTA (continuation),
-      // remove it so we don't get: "footer" then "on board today 🔐"
-      const nextLooksLikeContinuation =
-        next.trim().length > 0 &&
-        !/Ways To Pay:/i.test(next) &&
-        !/^\s*💳|^\s*💰|^\s*🌪️|^\s*📈|^\s*🚀/u.test(next) &&
-        !/^\s*DM\s*👉/i.test(next);
-
-      // Extra guard: only remove if the original DM line didn't already contain "on board"
-      // (common case: the "to get" line then "on board..." on next line)
-      if (nextLooksLikeContinuation && /to get/i.test(line)) {
-        lines[i + 1] = ""; // blank it out (keeps spacing consistent)
-      }
-    }
-  }
-
-  let out = lines.join("\n");
-
-  // If we didn't replace an existing DM block, append footer nicely
-  if (!replaced) {
-    if (!out.endsWith("\n")) out += "\n";
-    out += "\n" + footer;
-  }
-
-  // Remove duplicate footer lines (keep first)
-  const outLines = out.split("\n");
-  let seen = false;
-  const deduped = outLines.filter((l) => {
-    const isFooter = l.trim() === footer.trim();
-    if (!isFooter) return true;
-    if (seen) return false;
-    seen = true;
-    return true;
-  });
-
-  // Clean up any lines we blanked out (but keep intentional blank lines)
-  return deduped.join("\n").replace(/\n{3,}/g, "\n\n");
+  return raw
+    // Remove ONLY malformed https://@username junk
+    .replace(/https?:\/\/@\S+/gi, "")
+    // Replace @splitthepicks with Discord mention + Telegram link
+    .replace(
+      /@splitthepicks\b/gi,
+      `<@${DISCORD_CONTACT_USER_ID}> • ${TELEGRAM_CONTACT_URL}`
+    );
 }
+
 
 
 
