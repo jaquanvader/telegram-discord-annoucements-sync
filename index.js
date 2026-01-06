@@ -45,6 +45,7 @@ function transformContent(raw) {
   if (!/t\.me\/splitthepicks/i.test(text)) {
     text += `
 
+Message me on telegram for fastest response:
 ${TELEGRAM_CONTACT_URL}`;
   }
 
