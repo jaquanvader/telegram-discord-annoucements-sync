@@ -18,6 +18,9 @@ if (!PUBLIC_URL) throw new Error("Missing PUBLIC_URL");
 const bot = new Telegraf(BOT_TOKEN);
 const app = express();
 
+// Parse JSON even if Content-Type is weird/missing (prevents req.body undefined)
+app.use(express.json({ type: "*/*" }));
+
 // ---- SplitThePicks contact formatting ----
 const DISCORD_CONTACT_USER_ID =
   process.env.DISCORD_CONTACT_USER_ID || "1374514852701143091";
@@ -35,7 +38,7 @@ function transformContent(raw) {
   // Replace @splitthepicks with Discord mention ONLY
   text = text.replace(/@splitthepicks\b/gi, `<@${DISCORD_CONTACT_USER_ID}>`);
 
-  // If you ALSO want to replace @VEGASKILLER in that DM line, keep this line:
+  // Also map @VEGASKILLER to the same Discord contact (optional)
   text = text.replace(/@vegaskiller\b/gi, `<@${DISCORD_CONTACT_USER_ID}>`);
 
   // Append Telegram footer once
@@ -49,8 +52,12 @@ ${TELEGRAM_CONTACT_URL}`;
   return text;
 }
 
+// ---- Album buffering (media_group_id) ----
+const albumBuffer = new Map(); // key -> { caption, items: [], timer }
 
-
+function normalizeCaption(msg) {
+  return msg?.caption || msg?.text || "";
+}
 
 // Optional: only forward posts from a specific channel
 function passesChannelFilter(ctx) {
@@ -59,10 +66,35 @@ function passesChannelFilter(ctx) {
   if (!chat) return false;
 
   const asAt = chat.username ? `@${chat.username}` : null;
-  return (
-    asAt === TELEGRAM_CHANNEL_ID ||
-    chat.id?.toString() === TELEGRAM_CHANNEL_ID
-  );
+  return asAt === TELEGRAM_CHANNEL_ID || chat.id?.toString() === TELEGRAM_CHANNEL_ID;
+}
+
+// Build a Telegram file URL (Telegram hosts files at this URL)
+async function getTelegramFileUrl(fileId) {
+  const r = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${fileId}`);
+  const j = await r.json();
+  const filePath = j?.result?.file_path;
+  if (!filePath) throw new Error("Could not resolve Telegram file path");
+  return `https://api.telegram.org/file/bot${BOT_TOKEN}/${filePath}`;
+}
+
+async function sendToDiscord({ content, files }) {
+  const form = new FormData();
+  form.append("payload_json", JSON.stringify({ content: (content || "").slice(0, 1900) }));
+
+  for (let i = 0; i < files.length; i++) {
+    const { url, filename } = files[i];
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`Failed to fetch media: ${resp.status}`);
+    const buf = Buffer.from(await resp.arrayBuffer());
+    form.append(`files[${i}]`, buf, { filename: filename || `media-${i}.jpg` });
+  }
+
+  const res = await fetch(DISCORD_WEBHOOK_URL, { method: "POST", body: form });
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`Discord webhook failed: ${res.status} ${txt}`);
+  }
 }
 
 bot.on("channel_post", async (ctx) => {
@@ -126,31 +158,43 @@ bot.on("channel_post", async (ctx) => {
     return;
   }
 
+  // Single media post
   await sendToDiscord({
     content: caption || "",
     files: [{ url: fileUrl, filename }]
   });
 });
 
-// Telegram webhook: parse JSON ONLY for this route
-app.post("/telegram-webhook", express.json(), (req, res) => {
+// Telegram webhook endpoint (robust against undefined body)
+app.post("/telegram-webhook", (req, res) => {
   try {
-    // Telegram should send an update object with update_id
-    if (!req.body || typeof req.body !== "object") {
-      console.error("Webhook received non-JSON body:", typeof req.body);
+    const update = req.body;
+
+    if (!update || typeof update !== "object") {
+      console.error("Telegram webhook: missing/invalid JSON body");
       return res.sendStatus(400);
     }
 
-    if (req.body.update_id === undefined) {
-      console.error("Webhook received unexpected payload:", JSON.stringify(req.body).slice(0, 500));
+    if (update.update_id === undefined) {
+      console.error("Telegram webhook: unexpected payload:", JSON.stringify(update).slice(0, 500));
       return res.sendStatus(400);
     }
 
-    bot.handleUpdate(req.body);
-    return res.sendStatus(200);
+    // Pass res in webhook mode
+    return bot.handleUpdate(update, res);
   } catch (e) {
     console.error("Webhook error:", e);
     return res.sendStatus(500);
   }
 });
 
+// Health check
+app.get("/", (req, res) => res.status(200).send("ok"));
+
+app.listen(PORT, async () => {
+  console.log(`Listening on :${PORT}`);
+
+  const webhookUrl = `${PUBLIC_URL}/telegram-webhook`;
+  await bot.telegram.setWebhook(webhookUrl);
+  console.log("Webhook set to:", webhookUrl);
+});
