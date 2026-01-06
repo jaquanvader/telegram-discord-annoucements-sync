@@ -25,19 +25,43 @@ function discordMention(userId) {
   return `<@${userId}>`;
 }
 
+const DISCORD_CONTACT_USER_ID = "1374514852701143091";
+const TELEGRAM_CONTACT_URL = "https://t.me/splitthepicks";
+
 function transformContent(raw) {
   let text = (raw || "").trim();
 
-  // Normalize common Telegram link formats
-  text = text.replace(/https?:\/\/t\.me\/splitthepicks/gi, "t.me/splitthepicks");
+  const contactLine = `DM 👉 <@${DISCORD_CONTACT_USER_ID}> • ${TELEGRAM_CONTACT_URL}`;
 
-  // Replace @splitthepicks OR t.me/splitthepicks with both contact options
-  const contactLine = `${discordMention(DISCORD_CONTACT_USER_ID)} • ${TELEGRAM_CONTACT_URL}`;
-  text = text.replace(/@splitthepicks/gi, contactLine);
-  text = text.replace(/\bt\.me\/splitthepicks\b/gi, contactLine);
+  // Normalize everything to lowercase for detection
+  const lower = text.toLowerCase();
+
+  // Detect ANY SplitThePicks reference
+  const hasSTP =
+    lower.includes("@splitthepicks") ||
+    lower.includes("t.me/splitthepicks") ||
+    lower.includes("splitthepicks");
+
+  // Remove ALL @handles and malformed links (Telegram junk)
+  text = text
+    // remove @username
+    .replace(/@\S+/g, "")
+    // remove malformed https://@username
+    .replace(/https?:\/\/@\S+/gi, "")
+    // remove raw t.me links
+    .replace(/https?:\/\/t\.me\/\S+/gi, "")
+    // collapse extra spaces
+    .replace(/\s{2,}/g, " ")
+    .trim();
+
+  // Append ONE clean contact line if SplitThePicks was mentioned
+  if (hasSTP) {
+    text = text ? `${text}\n\n${contactLine}` : contactLine;
+  }
 
   return text;
 }
+
 
 // Telegram will POST JSON updates here
 app.use(express.json());
