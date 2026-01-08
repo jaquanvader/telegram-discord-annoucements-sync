@@ -38,20 +38,26 @@ function transformContent(raw) {
   // Remove malformed https://@username junk ONLY
   text = text.replace(/https?:\/\/@\S+/gi, "");
 
-  // Clean clickable link text for the body
-  const tgBodyLink = "t.me/splitthepicks";
+  // Always-clickable link (no preview)
+  const tgLink = `<${TELEGRAM_CONTACT_URL}>`;
 
-  // Replace handles in-body with the Telegram link
-  text = text.replace(/@splitthepicks\b/gi, tgBodyLink);
-  text = text.replace(/@vegaskiller\b/gi, tgBodyLink); // optional
+  // Replace handles with a SPACE + link so Discord always recognizes it
+  text = text.replace(/@splitthepicks\b/gi, ` ${tgLink}`);
+  text = text.replace(/@vegaskiller\b/gi, ` ${tgLink}`); // optional
 
-  // Add footer only if there is no Telegram link already in the message
-  if (!/t\.me\/splitthepicks/i.test(text)) {
-    text += `\n\n👉 <${TELEGRAM_CONTACT_URL}>`;
+  // Add footer only if not already present anywhere
+  const footer = telegramFooter();
+  const hasFooterAlready =
+    text.includes(tgLink) || /t\.me\/splitthepicks/i.test(text);
+
+  if (!hasFooterAlready) {
+    text += `\n\n${footer}`;
   }
 
   return text;
 }
+
+
 
 
 // ---- Album buffering (media_group_id) ----
