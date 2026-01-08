@@ -30,6 +30,10 @@ function telegramFooter() {
   return `👉 <${TELEGRAM_CONTACT_URL}>`;
 }
 
+function telegramFooter() {
+  return `👉 <${TELEGRAM_CONTACT_URL}>`;
+}
+
 function transformContent(raw) {
   if (!raw) return raw;
 
@@ -41,18 +45,12 @@ function transformContent(raw) {
   // Always-clickable link (no preview)
   const tgLink = `<${TELEGRAM_CONTACT_URL}>`;
 
-  // Replace handles with a SPACE + link so Discord always recognizes it
+  // Replace handles with SPACE + link so Discord always hyperlinks it
   text = text.replace(/@splitthepicks\b/gi, ` ${tgLink}`);
   text = text.replace(/@vegaskiller\b/gi, ` ${tgLink}`); // optional
 
-  // Add footer only if not already present anywhere
-  const footer = telegramFooter();
-  const hasFooterAlready =
-    text.includes(tgLink) || /t\.me\/splitthepicks/i.test(text);
-
-  if (!hasFooterAlready) {
-    text += `\n\n${footer}`;
-  }
+  // ALWAYS append footer (for the Telegram button look)
+  text += `\n\n${telegramFooter()}`;
 
   return text;
 }
