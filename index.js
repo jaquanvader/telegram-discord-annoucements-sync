@@ -27,8 +27,7 @@ const TELEGRAM_CONTACT_URL =
 
 // Build footer exactly once
 function telegramFooter() {
-  // Use <...> to keep it clean + clickable (and prevents big previews)
-  return `Message me on Telegram:\n👉 <${TELEGRAM_CONTACT_URL}>`;
+  return `👉 <${TELEGRAM_CONTACT_URL}>`;
 }
 
 function transformContent(raw) {
@@ -36,25 +35,24 @@ function transformContent(raw) {
 
   let text = raw;
 
-  // Remove malformed https://@username junk ONLY (keep line breaks)
+  // Remove malformed https://@username junk ONLY
   text = text.replace(/https?:\/\/@\S+/gi, "");
 
-  // Strip handles from body (we rely on footer)
-  text = text.replace(/@splitthepicks\b/gi, "");
-  text = text.replace(/@vegaskiller\b/gi, "");
+  // Clean clickable link text for the body
+  const tgBodyLink = "t.me/splitthepicks";
 
-  // Append footer once (don’t duplicate)
-  const footer = telegramFooter();
-  const alreadyHasTelegram =
-    /t\.me\/splitthepicks/i.test(text) ||
-    new RegExp(TELEGRAM_CONTACT_URL.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i").test(text);
+  // Replace handles in-body with the Telegram link
+  text = text.replace(/@splitthepicks\b/gi, tgBodyLink);
+  text = text.replace(/@vegaskiller\b/gi, tgBodyLink); // optional
 
-  if (!alreadyHasTelegram) {
-    text += `\n\n${footer}`;
+  // Add footer only if there is no Telegram link already in the message
+  if (!/t\.me\/splitthepicks/i.test(text)) {
+    text += `\n\n👉 <${TELEGRAM_CONTACT_URL}>`;
   }
 
   return text;
 }
+
 
 // ---- Album buffering (media_group_id) ----
 const albumBuffer = new Map(); // key -> { caption, items: [], timer }
