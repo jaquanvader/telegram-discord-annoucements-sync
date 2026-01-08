@@ -26,7 +26,7 @@ const TELEGRAM_CONTACT_URL =
   process.env.TELEGRAM_CONTACT_URL || "https://t.me/splitthepicks";
 
 function telegramFooter() {
-  return TELEGRAM_CONTACT_URL;
+  return `Message me on telegram:\n👉 ${TELEGRAM_CONTACT_URL}`;
 }
 
 
@@ -40,18 +40,25 @@ function transformContent(raw) {
   // Remove malformed https://@username junk ONLY
   text = text.replace(/https?:\/\/@\S+/gi, "");
 
-  // Replace @splitthepicks inline with a clean URL + trailing space
-  // Trailing space prevents ✅to from being included in the URL.
-  text = text.replace(/@splitthepicks\b/gi, `${TELEGRAM_CONTACT_URL} `);
+  // Replace @splitthepicks inline with the Telegram link (space prevents emoji bleed)
+  const inline = `${TELEGRAM_CONTACT_URL} `;
+  text = text.replace(/@splitthepicks\b/gi, inline);
+  text = text.replace(/@vegaskiller\b/gi, inline); // optional
 
-  // Optional: treat @vegaskiller the same way
-  text = text.replace(/@vegaskiller\b/gi, `${TELEGRAM_CONTACT_URL} `);
-
-  // Normalize "DM👉" spacing a bit (optional but makes it readable)
+  // Normalize DM arrow spacing
   text = text.replace(/DM\s*👉\s*/gi, "DM👉 ");
 
-  // ALWAYS append footer (for the Telegram preview card/button)
-  text += `\n\n${telegramFooter()}`;
+  // ---- Bold the FIRST line only ----
+  const lines = text.split("\n");
+  if (lines[0]?.trim()) {
+    lines[0] = `**${lines[0].trim()}**`;
+  }
+  text = lines.join("\n");
+
+  // ---- Append footer ONLY if link is not already present ----
+  if (!/https?:\/\/t\.me\/splitthepicks/i.test(text)) {
+    text += `\n\n${telegramFooter()}`;
+  }
 
   return text;
 }
