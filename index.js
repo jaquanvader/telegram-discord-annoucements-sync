@@ -26,10 +26,9 @@ const TELEGRAM_CONTACT_URL =
   process.env.TELEGRAM_CONTACT_URL || "https://t.me/splitthepicks";
 
 function telegramFooter() {
-  return `❓Questions
-Message me on telegram:
-👉 ${TELEGRAM_CONTACT_URL}`;
+  return TELEGRAM_CONTACT_URL;
 }
+
 
 
 
