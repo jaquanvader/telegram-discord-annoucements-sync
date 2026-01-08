@@ -27,12 +27,9 @@ const TELEGRAM_CONTACT_URL =
 
 // Build footer exactly once
 function telegramFooter() {
-  return `👉 <${TELEGRAM_CONTACT_URL}>`;
+  return `You can contact @splitthepicks right away on Telegram:\n<${TELEGRAM_CONTACT_URL}>`;
 }
 
-function telegramFooter() {
-  return `👉 <${TELEGRAM_CONTACT_URL}>`;
-}
 
 function transformContent(raw) {
   if (!raw) return raw;
@@ -49,11 +46,12 @@ function transformContent(raw) {
   text = text.replace(/@splitthepicks\b/gi, ` ${tgLink}`);
   text = text.replace(/@vegaskiller\b/gi, ` ${tgLink}`); // optional
 
-  // ALWAYS append footer (for the Telegram button look)
+  // ALWAYS append footer
   text += `\n\n${telegramFooter()}`;
 
   return text;
 }
+
 
 
 
