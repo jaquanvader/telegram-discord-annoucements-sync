@@ -21,33 +21,36 @@ const app = express();
 // Parse JSON even if Content-Type is weird/missing (prevents req.body undefined)
 app.use(express.json({ type: "*/*" }));
 
-// ---- SplitThePicks contact formatting ----
-const DISCORD_CONTACT_USER_ID =
-  process.env.DISCORD_CONTACT_USER_ID || "1374514852701143091";
+// ---- Telegram CTA only ----
 const TELEGRAM_CONTACT_URL =
   process.env.TELEGRAM_CONTACT_URL || "https://t.me/splitthepicks";
+
+// Build footer exactly once
+function telegramFooter() {
+  // Use <...> to keep it clean + clickable (and prevents big previews)
+  return `Message me on Telegram:\n👉 <${TELEGRAM_CONTACT_URL}>`;
+}
 
 function transformContent(raw) {
   if (!raw) return raw;
 
   let text = raw;
 
-  // Remove malformed https://@username junk ONLY
+  // Remove malformed https://@username junk ONLY (keep line breaks)
   text = text.replace(/https?:\/\/@\S+/gi, "");
 
-  // Replace @splitthepicks with Discord mention ONLY
-  text = text.replace(/@splitthepicks\b/gi, `<@${DISCORD_CONTACT_USER_ID}>`);
+  // Strip handles from body (we rely on footer)
+  text = text.replace(/@splitthepicks\b/gi, "");
+  text = text.replace(/@vegaskiller\b/gi, "");
 
-  // Also map @VEGASKILLER to the same Discord contact (optional)
-  text = text.replace(/@vegaskiller\b/gi, `<@${DISCORD_CONTACT_USER_ID}>`);
+  // Append footer once (don’t duplicate)
+  const footer = telegramFooter();
+  const alreadyHasTelegram =
+    /t\.me\/splitthepicks/i.test(text) ||
+    new RegExp(TELEGRAM_CONTACT_URL.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i").test(text);
 
-  // Append Telegram footer once
-  if (!/t\.me\/splitthepicks/i.test(text)) {
-    text += `
-
-❓Questions
-Message me on telegram:
-👉 ${TELEGRAM_CONTACT_URL}`;
+  if (!alreadyHasTelegram) {
+    text += `\n\n${footer}`;
   }
 
   return text;
@@ -60,15 +63,24 @@ function normalizeCaption(msg) {
   return msg?.caption || msg?.text || "";
 }
 
-// Optional: only forward posts from a specific channel
 function passesChannelFilter(ctx) {
-  if (!TELEGRAM_CHANNEL_ID) return true;
   const chat = ctx.update?.channel_post?.chat;
   if (!chat) return false;
 
-  const asAt = chat.username ? `@${chat.username}` : null;
-  return asAt === TELEGRAM_CHANNEL_ID || chat.id?.toString() === TELEGRAM_CHANNEL_ID;
+  const channelUsername = chat.username ? `@${chat.username}` : null;
+  const channelId = chat.id?.toString();
+
+  const allowedChannels = [
+    process.env.TELEGRAM_CHANNEL_ID,
+    process.env.TELEGRAM_CHANNEL_ID_TEST
+  ].filter(Boolean); // remove undefined
+
+  // Allow if username OR numeric ID matches any allowed channel
+  return allowedChannels.some(
+    (allowed) => allowed === channelUsername || allowed === channelId
+  );
 }
+
 
 // Build a Telegram file URL (Telegram hosts files at this URL)
 async function getTelegramFileUrl(fileId) {
@@ -123,6 +135,7 @@ bot.on("channel_post", async (ctx) => {
     fileId = doc.file_id;
     filename = doc.file_name || `file-${msg.message_id}`;
   } else {
+    // Pure text post
     await sendToDiscord({ content: caption || "(no text)", files: [] });
     return;
   }
@@ -134,6 +147,7 @@ bot.on("channel_post", async (ctx) => {
     const key = `${msg.chat.id}:${mediaGroupId}`;
     const existing = albumBuffer.get(key) || { caption: "", items: [], timer: null };
 
+    // Keep first non-empty caption (already transformed)
     if (!existing.caption && caption) existing.caption = caption;
 
     existing.items.push({ url: fileUrl, filename });
@@ -143,6 +157,7 @@ bot.on("channel_post", async (ctx) => {
     existing.timer = setTimeout(async () => {
       albumBuffer.delete(key);
 
+      // Discord file count/size limits—keep it reasonable
       const files = existing.items.slice(0, 10);
 
       try {
