@@ -25,10 +25,12 @@ app.use(express.json({ type: "*/*" }));
 const TELEGRAM_CONTACT_URL =
   process.env.TELEGRAM_CONTACT_URL || "https://t.me/splitthepicks";
 
-// Build footer exactly once
 function telegramFooter() {
-  return `You can contact @splitthepicks right away on Telegram:\n<${TELEGRAM_CONTACT_URL}>`;
+  return `❓Questions
+Message me on telegram:
+👉 ${TELEGRAM_CONTACT_URL}`;
 }
+
 
 
 function transformContent(raw) {
@@ -39,18 +41,23 @@ function transformContent(raw) {
   // Remove malformed https://@username junk ONLY
   text = text.replace(/https?:\/\/@\S+/gi, "");
 
-  // Inline link (optional). If you want inline to also preview, use TELEGRAM_CONTACT_URL without < >
-  const inlineLink = TELEGRAM_CONTACT_URL;
+  // Remove handles (we rely on footer)
+  text = text.replace(/@splitthepicks\b/gi, "");
+  text = text.replace(/@vegaskiller\b/gi, ""); // optional
 
-  // Replace handles in-body with a SPACE + link so it's readable
-  text = text.replace(/@splitthepicks\b/gi, ` ${inlineLink}`);
-  text = text.replace(/@vegaskiller\b/gi, ` ${inlineLink}`); // optional
+  // Clean up DM arrow spacing after removing handle
+  text = text.replace(/DM\s*👉\s*/gi, "DM👉 ");
 
-  // ALWAYS append footer (this is what triggers the Telegram embed card)
-  text += `\n\n${telegramFooter()}`;
+  // Append footer once
+  const footer = telegramFooter();
+  if (!text.includes(TELEGRAM_CONTACT_URL)) {
+    text += `\n\n${footer}`;
+  }
 
   return text;
 }
+
+
 
 
 
