@@ -41,21 +41,22 @@ function transformContent(raw) {
   // Remove malformed https://@username junk ONLY
   text = text.replace(/https?:\/\/@\S+/gi, "");
 
-  // Remove handles (we rely on footer)
-  text = text.replace(/@splitthepicks\b/gi, "");
-  text = text.replace(/@vegaskiller\b/gi, ""); // optional
+  // Replace @splitthepicks inline with a clean URL + trailing space
+  // Trailing space prevents ✅to from being included in the URL.
+  text = text.replace(/@splitthepicks\b/gi, `${TELEGRAM_CONTACT_URL} `);
 
-  // Clean up DM arrow spacing after removing handle
+  // Optional: treat @vegaskiller the same way
+  text = text.replace(/@vegaskiller\b/gi, `${TELEGRAM_CONTACT_URL} `);
+
+  // Normalize "DM👉" spacing a bit (optional but makes it readable)
   text = text.replace(/DM\s*👉\s*/gi, "DM👉 ");
 
-  // Append footer once
-  const footer = telegramFooter();
-  if (!text.includes(TELEGRAM_CONTACT_URL)) {
-    text += `\n\n${footer}`;
-  }
+  // ALWAYS append footer (for the Telegram preview card/button)
+  text += `\n\n${telegramFooter()}`;
 
   return text;
 }
+
 
 
 
