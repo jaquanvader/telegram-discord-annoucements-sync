@@ -39,18 +39,19 @@ function transformContent(raw) {
   // Remove malformed https://@username junk ONLY
   text = text.replace(/https?:\/\/@\S+/gi, "");
 
-  // Always-clickable link (no preview)
-  const tgLink = `<${TELEGRAM_CONTACT_URL}>`;
+  // Inline link (optional). If you want inline to also preview, use TELEGRAM_CONTACT_URL without < >
+  const inlineLink = TELEGRAM_CONTACT_URL;
 
-  // Replace handles with SPACE + link so Discord always hyperlinks it
-  text = text.replace(/@splitthepicks\b/gi, ` ${tgLink}`);
-  text = text.replace(/@vegaskiller\b/gi, ` ${tgLink}`); // optional
+  // Replace handles in-body with a SPACE + link so it's readable
+  text = text.replace(/@splitthepicks\b/gi, ` ${inlineLink}`);
+  text = text.replace(/@vegaskiller\b/gi, ` ${inlineLink}`); // optional
 
-  // ALWAYS append footer
+  // ALWAYS append footer (this is what triggers the Telegram embed card)
   text += `\n\n${telegramFooter()}`;
 
   return text;
 }
+
 
 
 
