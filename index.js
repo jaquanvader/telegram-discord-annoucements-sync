@@ -32,15 +32,19 @@ function telegramFooter() {
 
 
 
+
 function transformContent(raw) {
   if (!raw) return raw;
+
+  // Track whether the ORIGINAL message referenced your handle
+  const shouldFooter = /@splitthepicks\b|@vegaskiller\b/i.test(raw);
 
   let text = raw;
 
   // Remove malformed https://@username junk ONLY
   text = text.replace(/https?:\/\/@\S+/gi, "");
 
-  // Replace @splitthepicks inline with the Telegram link (space prevents emoji bleed)
+  // Replace handles inline with the Telegram link (space prevents emoji bleed)
   const inline = `${TELEGRAM_CONTACT_URL} `;
   text = text.replace(/@splitthepicks\b/gi, inline);
   text = text.replace(/@vegaskiller\b/gi, inline); // optional
@@ -48,20 +52,23 @@ function transformContent(raw) {
   // Normalize DM arrow spacing
   text = text.replace(/DM\s*👉\s*/gi, "DM👉 ");
 
-  // ---- Bold the FIRST line only ----
+  // Bold the FIRST line only
   const lines = text.split("\n");
   if (lines[0]?.trim()) {
     lines[0] = `**${lines[0].trim()}**`;
   }
   text = lines.join("\n");
 
-  // ---- Append footer ONLY if link is not already present ----
-  if (!/https?:\/\/t\.me\/splitthepicks/i.test(text)) {
+  // Add footer ONLY if the original message had @splitthepicks (or @vegaskiller),
+  // AND the message doesn't already contain the Telegram link (avoid duplicates)
+  const hasLinkAlready = /https?:\/\/t\.me\/splitthepicks/i.test(text);
+  if (shouldFooter && !hasLinkAlready) {
     text += `\n\n${telegramFooter()}`;
   }
 
   return text;
 }
+
 
 
 
